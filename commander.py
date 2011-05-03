@@ -1,10 +1,29 @@
-"""
+r"""
 Extended interface to subprocess creation, dataflow oriented programming
 
 TODO:
 exception propagation
-exit status errorlevel checks
 serialized safe wrapper threads
+broken pipe signal
+exit status errorlevel checks
+
+Note: in the following examples ">> stdout" is required because 
+otherwise doctest cannot see your standard output. It's not 
+necessary in normal use.
+
+>>> from commander import *
+>>> from sys import stdout
+>>> Cmd.echo('Hello, World!') >> stdout
+Hello, World!
+>>> Cmd.echo('Hello, World!') / Cmd.rev >> stdout
+!dlroW ,olleH
+>>> list(xrange(128,132) / Cmd.rev / float)
+[821.0, 921.0, 31.0, 131.0]
+>>> l=[]
+>>> Cmd.sh('-c', 'echo aaa; echo bbb; echo ccc') / (lambda x: '@'+x) >> l
+>>> l
+['@aaa\n', '@bbb\n', '@ccc\n']
+
 
 """
 
@@ -144,13 +163,19 @@ class Iter2Pipe(threading.Thread):
     """ Bridge thread from python iterator to a pipe """
 
     def __init__(self, obj):
-        self._source = make_readable(obj)
+        self.source = make_readable(obj)
+        self.exc_info = None
         threading.Thread.__init__(self)
 
     def fileno(self):
         """ File descriptor through which data may be read. """
         self._initthread()
         return self._readfd
+
+    def close(self):
+        if self.exc_info:
+            type, value, traceback = self.exc_info
+            raise type, value, traceback
 
     ### internal methods:
 
@@ -166,7 +191,7 @@ class Iter2Pipe(threading.Thread):
         flags = fcntl.fcntl(self._writefd, fcntl.F_GETFD)
         fcntl.fcntl(self._writefd, fcntl.F_SETFD, flags | fcntl.FD_CLOEXEC)
 
-        # Get native pipe block size (not critical, but nice for performance)
+        # Get pipe buffer size (not critical, but nice for performance)
         try:
             self._bufsize = os.fstat(self._writefd).st_blksize
         except (os.error, AttributeError):
@@ -178,9 +203,9 @@ class Iter2Pipe(threading.Thread):
         try:
             while True:
                 try:
-                    buf = self._source.read(self._bufsize)
-                except Exception as e:
-                    self._pending_exception = e
+                    buf = self.source.read(self._bufsize)
+                except Exception:
+                    self._pending_exception = sys.exc_info()
                     break
                 if not buf:
                     break
@@ -190,7 +215,7 @@ class Iter2Pipe(threading.Thread):
                     return
         finally:
             os.close(self._writefd)
-            self._source.close()
+            self.source.close()
 
 
 class CmdMeta(type):
@@ -417,3 +442,7 @@ __all__ = [
     'Cmd', 'Dataflow', 'File',
     'filt', 'feed',
 ]
+
+if __name__ == '__main__':
+    import doctest
+    doctest.testmod()
