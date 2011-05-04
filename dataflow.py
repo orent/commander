@@ -103,9 +103,6 @@ def feed(sink, source):
     elif hasattr(sink, 'write'):
         # feed items individually, converting to string first
         for x in source:
-            # Non-string items get newlines appended when implicitly
-            # converted to strings.
-            # To override this convert them to string explicitly
             if not isinstance(x, str):
                 x = '%s\n' % x
             sink.write(x)
@@ -135,33 +132,7 @@ feed_registry = {
 }
 
 class Dataflow(DataflowOps):
-    """ Object representing recipe for a data flow
-
-    A dataflow is iterable:
-      iter(Dataflow(src)) => iter(src)
-      iter(Dataflow(src, filter)) => filter(src)
-      iter(Dataflow(src, filter1, filter2)) => filter2(filter1(src))
-
-    A dataflow may be used as a filter:
-      filt(Dataflow(filter1, filter2), src) => filter2(filter1(src))
-
-    A dataflow may be used as a sink:
-      feed(sink, Dataflow(src, filter2))
-
-    A dataflow may represent a complete dataflow:
-    Dataflow(src, filter1, filter2, ..., sink).call()
-      Executed with for its side effects.
-
-    Equivalent dataflow operators:
-
-    a / b >> c == feed(c, Dataflow(a,b))
-
-    Dataflow is generic and independent from Subprocess and its
-    subclasses. Dataflow normally uses the iterator protocol but
-    note that Subprocess and its subclasses will use file handles
-    for any object that has a fileno() method so many dataflows
-    may run entirely outside the python interpreter.
-    """
+    """ Object representing recipe for a data flow """
 
     def __init__(self, *stages):
         flat = []
@@ -218,7 +189,7 @@ class File(DataflowOps):
 
 
 class Filter(DataflowOps):
-    """ Wrapper to make a callable object a whole-stream filter rather
+    """ Decorator to make a callable object a whole-stream filter rather
     than a per-item filter """
     def __init__(self, callable):
         self.callable = callable
@@ -251,7 +222,3 @@ def stripnl(x):
 
 
 __all__ = ['Dataflow', 'filt', 'feed', 'File', 'uniq', 'nl', 'stripnl']
-
-if __name__ == '__main__':
-    import doctest
-    doctest.testmod()

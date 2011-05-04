@@ -1,5 +1,5 @@
 r"""
-Extended interface to subprocess creation, dataflow oriented programming
+Extended interface to subprocess creation.
 
 Note: in the following examples ">> stdout" is required because
 otherwise doctest cannot see your standard output. It's not
@@ -25,25 +25,24 @@ Hello, World!
 """
 from subprocess2 import *
 
-# This module combines nicely with dataflow, but is useful without it
+# This module combines nicely with dataflow, but is still useful without it
 try:
     from dataflow import *
     from dataflow import DataflowOps as _CmdBase
 except ImportError:
     _CmdBase = object
 
-class CmdMeta(type):
-    """ Make Cmd.name a shortcut to Cmd('name') """
-    def __getattr__(cls, name):
-        if name.startswith('_'):
-            raise AttributeError
-        return Cmd(name)
-
 class Cmd(_CmdBase):
     """ Object describing an executable command """
     # Implementation: all object attrs are names of arguments to 
     # Subprocess (i.e. subprocess.Popen)
-    __metaclass__ = CmdMeta
+
+    # Make Cmd.name a shortcut to Cmd('name')
+    class __metaclass__(type):
+        def __getattr__(cls, name):
+            if name.startswith('_'):
+                raise AttributeError
+            return Cmd(name)
 
     def __init__(self, *args, **kw):
         self.args = list(args)
@@ -52,13 +51,12 @@ class Cmd(_CmdBase):
     def __repr__(self):
         """ Make eval(repr(command)) == command """
         argrepr = [repr(a) for a in self.args]
-        argrepr += [
-                "%s=%r" % (k,v)
+        argrepr += ["%s=%r" % (k,v)
                 for k,v in sorted(vars(self).items())
                 if k != 'args']
         return "%s(%s)" % (self.__class__.__name__, ', '.join(argrepr))
 
-    def _updateargs(self, *newargs, **newkw):
+    def __call__(self, *newargs, **newkw):
         """ Return new command object with additional arguments """
         kw = vars(self).copy()
         args = kw.pop('args')
@@ -66,26 +64,18 @@ class Cmd(_CmdBase):
         args = args + list(newargs)
         return Cmd(*args, **kw)
 
-    __call__ = _updateargs
-
     def subprocess(self):
         """ Start a subprocess object described by this command """
         return Subprocess(**vars(self))
 
-    def producer(self):
-        """ Start a Producer subprocess """
-        return Producer(**vars(self))
-
-    def consumer(self):
-        """ Start a Consumer subprocess """
-        return Producer(**vars(self))
-
     def call(self, *args, **kw):
-        """ Bind args, start subprocess, wait for completion """
+        """ Add arguments, start subprocess, wait for completion """
         return self(*args, **kw).subprocess().wait()
 
     # implements the iterator protocol - use this command as data source
-    __iter__ = producer
+    def __iter__(self):
+        """ Start a Producer subprocess """
+        return Producer(**vars(self))
 
     # implements the feed protocol - use this command as data sink 
     def __feed__(self, source):

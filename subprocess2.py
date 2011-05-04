@@ -201,7 +201,3 @@ __all__ = [
     'PIPE', 'STDOUT',
     'Subprocess', 'Producer', 'Consumer',
 ]
-
-if __name__ == '__main__':
-    import doctest
-    doctest.testmod()
