@@ -37,7 +37,7 @@ class Subprocess(subprocess.Popen):
         iterator = iter(arg)
 
         if hasattr(iterator, 'fileno'):     # an iterator with a fileno?
-            return iterator                 # (e.g. file object or producer)
+            return iterator                 # (e.g. file, urlopen, producer)
         else:
             return Iter2Pipe(iterator)      # no, wrap in bridge thread
 
@@ -105,6 +105,7 @@ class _RawIterIO(io.BufferedIOBase):
             if not isinstance(x, str):
                 x = '%s\n' % x
             yield x
+        iterable = None     # let gc do its work
         while True:
             yield ''
 
@@ -124,7 +125,7 @@ class _RawIterIO(io.BufferedIOBase):
 
     def close(self):
         io.BufferedIOBase.close(self)
-        self.iterator = iter(())
+        self.iterator = None
 
 
 def make_readable(obj):
@@ -153,9 +154,12 @@ class Iter2Pipe(threading.Thread):
         return self._readfd
 
     def close(self):
+        # Propagate iteration raised in thread:
         if self.exc_info:
             type, value, traceback = self.exc_info
             raise type, value, traceback
+
+    __del__ = close
 
     ### internal methods:
 
@@ -171,11 +175,11 @@ class Iter2Pipe(threading.Thread):
         flags = fcntl.fcntl(self._writefd, fcntl.F_GETFD)
         fcntl.fcntl(self._writefd, fcntl.F_SETFD, flags | fcntl.FD_CLOEXEC)
 
-        # Get pipe buffer size (not critical, but nice for performance)
+        # Get pipe buffer size
         try:
             self._bufsize = os.fstat(self._writefd).st_blksize
         except (os.error, AttributeError):
-            self._bufsize = io.DEFAULT_BUFFER_SIZE
+            self._bufsize = 2048   # too small better than too big - may cause blocking
         self.start()
 
     def run(self):

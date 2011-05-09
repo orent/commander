@@ -28,10 +28,12 @@ A Dataflow object is a recipe for combinations of the above
 protocols. This means that a Dataflow is a passive object that
 does not actually do anything to its arguments until stated.
 
-A dataflow implements all three protocols and usually makes it
-unnecessary to directly use the functions iter, filt and feed.
+A dataflow uses all three protocols and usually makes it
+unnecessary to directly use the functions iter, filt or feed.
 Starting a dataflow is done by iteration or using the >> operator.
-The / operator concatenates dataflows and dataflow stages.
+The / operator concatenates dataflows and dataflow stages. Sorry,
+but the operator precedence of | is too low which makes it awkward
+to use and requires parentheses.
 
 The following statements are equivalent:
     for x in filt(f2, filt(f1, iter(src))):
@@ -52,18 +54,17 @@ The following statements are also equivalent:
 
     (again, last one requires src or f1 to have DataflowOps)
 
-Note that the dataflow is from left to right while chaining of function
-calls generally works right to left.
+Note that the dataflow direction is from left to right while chaining
+of function calls generally works right to left.
 
+TODO: Allow last and second-to-last dataflow stages to collude in bypassing
+iterator protocol (e.g. sink is writable file, prev stage is a subprocess)
 """
 
 class DataflowOps(object):
-    """ Adds / and >> dataflow operators to an object
-    Sorry, no | operator.
-    It has lower precedence than >> which makes it awkward to use.
-    """
+    """ Adds / and >> dataflow operators to an object """
     def __div__(self, right):
-        """ Concatenate dataflow or stages """
+        """ Concatenate dataflows or stages """
         return Dataflow(self, right)
 
     def __rdiv__(self, left):
@@ -71,6 +72,7 @@ class DataflowOps(object):
         return Dataflow(left, self)
 
     def __rshift__(self, right):
+        """ Concatenate and start dataflow """
         ( Dataflow(self) / Dataflow(right) ).call()
 
     def __rrshift__(self, left):

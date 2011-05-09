@@ -8,15 +8,24 @@ necessary in normal use.
 >>> from commander import *
 >>> Cmd.true().call()
 0
+
 >>> Cmd.false().call()
 1
+
 >>> from sys import stdout
 >>> Cmd.echo('Hello, World!') >> stdout
 Hello, World!
+
 >>> Cmd.echo('Hello, World!') / Cmd.rev >> stdout
 !dlroW ,olleH
+
+# equivalent, but fails doctest:
+#>>> Cmd.echo('Hello, World!') >> Cmd.rev
+#!dlroW ,olleH
+
 >>> list(xrange(128,132) / Cmd.rev / float)
 [821.0, 921.0, 31.0, 131.0]
+
 >>> l=[]
 >>> Cmd.sh('-c', 'echo aaa; echo bbb; echo ccc') / (lambda x: '@'+x) >> l
 >>> l
@@ -34,8 +43,7 @@ except ImportError:
 
 class Cmd(_CmdBase):
     """ Object describing an executable command """
-    # Implementation: all object attrs are names of arguments to 
-    # Subprocess (i.e. subprocess.Popen)
+    # Object attrs are named arguments to Subprocess (i.e. subprocess.Popen)
 
     # Make Cmd.name a shortcut to Cmd('name')
     class __metaclass__(type):
@@ -58,10 +66,10 @@ class Cmd(_CmdBase):
 
     def __call__(self, *newargs, **newkw):
         """ Return new command object with additional arguments """
-        kw = vars(self).copy()
-        args = kw.pop('args')
+        kw = dict(vars(self))
+        args = list(kw.pop('args'))
         kw.update(newkw)
-        args = args + list(newargs)
+        args.extend(newargs)
         return Cmd(*args, **kw)
 
     def subprocess(self):
@@ -84,8 +92,6 @@ class Cmd(_CmdBase):
     # implements filter protocol - apply this command to upstream source 
     def __filt__(self, upstream):
         return iter(self(stdin=upstream))
-
-__all__ = ['Cmd']
 
 if __name__ == '__main__':
     import doctest
