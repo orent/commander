@@ -184,6 +184,7 @@ class Iter2Pipe(threading.Thread):
 
     def run(self):
         """ Thread main function """
+        import sys
         try:
             while True:
                 try:
