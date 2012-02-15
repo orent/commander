@@ -189,6 +189,17 @@ class File(DataflowOps):
     def __feed__(self, source):
         feed(open(self.filename, 'w'), source)
 
+class URL(DataflowOps):
+    """ Class representing a URL. Read only. """
+    def __init__(self, url):
+        self.url = url
+
+    def __repr__(self):
+        return "%s(%r)" % (self.__class__.__name__, self.url)
+
+    def __iter__(self):
+        import urllib2
+        return urllib2.urlopen(self.url)
 
 class Filter(DataflowOps):
     """ Decorator to make a callable object a whole-stream filter rather
@@ -223,4 +234,4 @@ def stripnl(x):
     return x.rstrip('\n')
 
 
-__all__ = ['Dataflow', 'filt', 'feed', 'File', 'uniq', 'nl', 'stripnl']
+__all__ = ['Dataflow', 'filt', 'feed', 'File', 'URL', 'uniq', 'nl', 'stripnl']
