@@ -22,7 +22,15 @@ class Subprocess(subprocess.Popen):
         args = self._processargs(args)
         if 'stdin' in kw:
             kw['stdin'] = self._asfiledesc(kw['stdin'])
+        self._errorlevel = kw.pop('errorlevel', None)
+        self._cmd = subprocess.list2cmdline(args)[:200]
         subprocess.Popen.__init__(self, args, **kw)
+
+    def _handle_exitstatus(self, sts):
+        subprocess.Popen._handle_exitstatus(self, sts)
+        if self._errorlevel is not None:
+            if self.returncode >= self._errorlevel or self.returncode < 0:
+                raise subprocess.CalledProcessError(self.returncode, self._cmd)
 
     @staticmethod
     def _asfiledesc(arg):
