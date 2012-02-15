@@ -6,28 +6,28 @@ otherwise doctest cannot see your standard output. It's not
 necessary in normal use.
 
 >>> from commander import *
->>> Cmd.true().call()
+>>> Cmd.true()
 0
 
->>> Cmd.false().call()
+>>> Cmd.false()
 1
 
 >>> from sys import stdout
->>> Cmd.echo('Hello, World!') >> stdout
+>>> Cmd.echo['Hello, World!'] >> stdout
 Hello, World!
 
->>> Cmd.echo('Hello, World!') / Cmd.rev >> stdout
+>>> Cmd.echo['Hello, World!'] / Cmd.rev >> stdout
 !dlroW ,olleH
 
 # equivalent, but fails doctest:
-#>>> Cmd.echo('Hello, World!') >> Cmd.rev
+#>>> Cmd.echo['Hello, World!'] >> Cmd.rev
 #!dlroW ,olleH
 
 >>> list(xrange(128,132) / Cmd.rev / float)
 [821.0, 921.0, 31.0, 131.0]
 
 >>> l=[]
->>> Cmd.sh('-c', 'echo aaa; echo bbb; echo ccc') / (lambda x: '@'+x) >> l
+>>> Cmd.sh['-c', 'echo aaa; echo bbb; echo ccc'] / (lambda x: '@'+x) >> l
 >>> l
 ['@aaa\n', '@bbb\n', '@ccc\n']
 
@@ -45,12 +45,15 @@ class Cmd(_CmdBase):
     """ Object describing an executable command """
     # Object attrs are named arguments to Subprocess (i.e. subprocess.Popen)
 
-    # Make Cmd.name a shortcut to Cmd('name')
+    # Make Cmd.name and Cmd['name'] shortcuts to Cmd('name')
     class __metaclass__(type):
         def __getattr__(cls, name):
             if name.startswith('_'):
                 raise AttributeError
             return Cmd(name)
+
+        def __getitem__(cls, args):
+            return Cmd()[args]
 
     def __init__(self, *args, **kw):
         self.args = list(args)
@@ -58,27 +61,43 @@ class Cmd(_CmdBase):
 
     def __repr__(self):
         """ Make eval(repr(command)) == command """
-        argrepr = [repr(a) for a in self.args]
-        argrepr += ["%s=%r" % (k,v)
-                for k,v in sorted(vars(self).items())
-                if k != 'args']
-        return "%s(%s)" % (self.__class__.__name__, ', '.join(argrepr))
+        kw = vars(self).copy()
+        args = kw.pop('args')
 
-    def __call__(self, *newargs, **newkw):
+        argrepr = [repr(a) for a in args]
+        if kw:
+            argrepr += ["%s=%r" % (k,v) for k,v in sorted(kw.items())]
+            return "%s(%s)" % (self.__class__.__name__, ', '.join(argrepr))
+        else:
+            return "%s[%s]" % (self.__class__.__name__, ', '.join(argrepr))
+
+    def update(self, *newargs, **newkw):
         """ Return new command object with additional arguments """
         kw = dict(vars(self))
         args = list(kw.pop('args'))
+
+        for newarg in newargs:
+            if isinstance(newarg, dict):
+                kw.update(newarg)
+            else:
+                args.append(newarg)
         kw.update(newkw)
-        args.extend(newargs)
+
         return Cmd(*args, **kw)
+
+    def __getitem__(self, arg):
+        """ Syntactic sugar for .update(). Use dict() for keyword args """
+        if not isinstance(arg, tuple):
+            arg = (arg,)
+        return self.update(*arg)
 
     def subprocess(self):
         """ Start a subprocess object described by this command """
         return Subprocess(**vars(self))
 
-    def call(self, *args, **kw):
+    def __call__(self, *args, **kw):
         """ Add arguments, start subprocess, wait for completion """
-        return self(*args, **kw).subprocess().wait()
+        return self.update(*args, **kw).subprocess().wait()
 
     # implements the iterator protocol - use this command as data source
     def __iter__(self):
@@ -87,11 +106,11 @@ class Cmd(_CmdBase):
 
     # implements the feed protocol - use this command as data sink 
     def __feed__(self, source):
-        return self(stdin=source).call()
+        return self.update(stdin=source)()
 
     # implements filter protocol - apply this command to upstream source 
     def __filt__(self, upstream):
-        return iter(self(stdin=upstream))
+        return iter(self.update(stdin=upstream))
 
 if __name__ == '__main__':
     import doctest

@@ -47,7 +47,7 @@ The following statements are equivalent:
 The following statements are also equivalent:
     feed(target, filt(f2, filt(f1, iter(src))))
     feed(target, Dataflow(src, f1, f2))
-    Dataflow(src, f1, f2, target).call()
+    Dataflow(src, f1, f2, target)()
     Dataflow(src, f1, f2) >> target
     Dataflow(src) / f1 / f2 >> target
     src / f1 / f2 >> target
@@ -73,10 +73,10 @@ class DataflowOps(object):
 
     def __rshift__(self, right):
         """ Concatenate and start dataflow """
-        ( Dataflow(self) / Dataflow(right) ).call()
+        ( Dataflow(self) / Dataflow(right) )()
 
     def __rrshift__(self, left):
-        ( Dataflow(left) / Dataflow(self) ).call()
+        ( Dataflow(left) / Dataflow(self) )()
 
 
 def filt(filter, upstream):
@@ -169,7 +169,7 @@ class Dataflow(DataflowOps):
             # And apply last stage as filter to this upstream source
             return filt(laststage, upstream2)
 
-    def call(self):
+    def __call__(self):
         """ Run dataflow. Last stage must be a valid sink. """
         sink = self.stages[-1]
         feed(sink, Dataflow(*self.stages[:-1]) )
