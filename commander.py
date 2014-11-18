@@ -45,15 +45,12 @@ class Cmd(_CmdBase):
     """ Object describing an executable command """
     # Object attrs are named arguments to Subprocess (i.e. subprocess.Popen)
 
-    # Make Cmd.name and Cmd['name'] shortcuts to Cmd('name')
+    # Make Cmd.name shortcuts to Cmd('name')
     class __metaclass__(type):
         def __getattr__(cls, name):
             if name.startswith('_'):
                 raise AttributeError
             return Cmd(name)
-
-        def __getitem__(cls, args):
-            return Cmd()[args]
 
     def __init__(self, *args, **kw):
         self.args = list(args)
@@ -61,15 +58,8 @@ class Cmd(_CmdBase):
 
     def __repr__(self):
         """ Make eval(repr(command)) == command """
-        kw = vars(self).copy()
-        args = kw.pop('args')
-
-        argrepr = [repr(a) for a in args]
-        if kw:
-            argrepr += ["%s=%r" % (k,v) for k,v in sorted(kw.items())]
-            return "%s(%s)" % (self.__class__.__name__, ', '.join(argrepr))
-        else:
-            return "%s[%s]" % (self.__class__.__name__, ', '.join(argrepr))
+        argrepr = ["%s=%r" % item for item in sorted(vars(self).items())]
+        return "%s(%s)" % (self.__class__.__name__, ', '.join(argrepr))
 
     def update(self, *newargs, **newkw):
         """ Return new command object with additional arguments """
