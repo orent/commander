@@ -2,10 +2,8 @@
 Extensions to subprocess module
 
 TODO:
-exception propagation
 serialized safe wrapper threads
 broken pipe signal
-exit status errorlevel checks
 """
 
 import subprocess, io, os, threading
@@ -53,7 +51,7 @@ class Subprocess(subprocess.Popen):
     def _processargs(args, maxdepth=3):
         """ Expand iterable arguments """
 
-        def recurse(args, depth=1):
+        def recurse(args, depth=0):
             """ recurse except strings, strip newlines except top level """
             for arg in args:
                 if isinstance(arg, str):
@@ -153,19 +151,24 @@ class Iter2Pipe(threading.Thread):
 
     def __init__(self, obj):
         self.source = make_readable(obj)
-        self.exc_info = None
+        self._pending_exception = None
         threading.Thread.__init__(self)
 
     def fileno(self):
-        """ File descriptor through which data may be read. """
-        self._initthread()
+        """ File descriptor through which iterator data may be read. """
+        if not self.is_alive():
+            self._initthread()
         return self._readfd
 
     def close(self):
         # Propagate iteration raised in thread:
-        if self.exc_info:
-            type, value, traceback = self.exc_info
-            raise type, value, traceback
+        if self._pending_exception:
+            etype, evalue, traceback = self._pending_exception
+            self._pending_exception = None
+            try:
+                raise evalue.with_traceback(traceback)
+            except AttributeError:
+                exec('raise etype, evalue, traceback')
 
     __del__ = close
 
@@ -173,9 +176,6 @@ class Iter2Pipe(threading.Thread):
 
     def _initthread(self):
         """ Create thread to read from iterable and write to pipe """
-        if self.is_alive():
-            return
-
         self._readfd, self._writefd = os.pipe()
 
         # ensure write side of pipe is not inherited by child process
