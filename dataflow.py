@@ -177,17 +177,22 @@ class Dataflow(DataflowOps):
 
 class File(DataflowOps):
     """ Class representing a file on the disk """
-    def __init__(self, filename):
+    def __init__(self, filename, append=False):
         self.filename = filename
+        self.appendmode = append
 
     def __repr__(self):
-        return "%s(%r)" % (self.__class__.__name__, self.filename)
+        return "%s(%r%s)" % (self.__class__.__name__, self.filename, ', append=True' if self.appendmode else '')
 
     def __iter__(self):
         return open(self.filename)
 
     def __feed__(self, source):
-        feed(open(self.filename, 'w'), source)
+        feed(open(self.filename, 'a' if self.appendmode else 'w'), source)
+
+    @property
+    def append(self):
+        return type(self)(self.filename, append=True)
 
 class URL(DataflowOps):
     """ Class representing a URL. Read only. """

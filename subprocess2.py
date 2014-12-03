@@ -10,19 +10,16 @@ import subprocess, io, os, threading
 from subprocess import PIPE, STDOUT
 
 class Subprocess(subprocess.Popen):
-    """ Similar to subprocess.Popen with the following enhancements:
-        * expands iterable arguments recursively (except strings)
-        * expanded arguments are stripped of newlines to allow output of
-          one process to be used as args to another (like shell backticks)
+    """ Similar to subprocess.Popen with the following enhancement:
         * stdin may be another subprocess (producer) or any python iterable
+        * errorlevel argument may be set to set threshold for converting exit codes to exceptions 
     """
     def __init__(self, args, **kw):
-        args = self._processargs(args)
         if 'stdin' in kw:
             kw['stdin'] = self._asfiledesc(kw['stdin'])
         self._errorlevel = kw.pop('errorlevel', None)
         self._cmd = subprocess.list2cmdline(args)[:200]
-        subprocess.Popen.__init__(self, args, **kw)
+        subprocess.Popen.__init__(self, args=args, **kw)
 
     def _handle_exitstatus(self, sts):
         subprocess.Popen._handle_exitstatus(self, sts)
@@ -46,31 +43,6 @@ class Subprocess(subprocess.Popen):
             return iterator                 # (e.g. file, urlopen, producer)
         else:
             return Iter2Pipe(iterator)      # no, wrap in bridge thread
-
-    @staticmethod
-    def _processargs(args, maxdepth=3):
-        """ Expand iterable arguments """
-
-        def recurse(args, depth=0):
-            """ recurse except strings, strip newlines except top level """
-            for arg in args:
-                if isinstance(arg, str):
-                    if depth > 1:
-                        arg = arg.rstrip('\n')
-                    yield arg
-                elif depth > maxdepth:
-                    yield str(arg)
-                else:
-                    try:
-                        iterator = iter(arg)
-                    except TypeError:
-                        yield str(arg)
-                    else:
-                        for x in recurse(iterator, depth + 1):
-                            yield x
-
-        return list(recurse(args))
-
 
 class Producer(Subprocess, io.BufferedReader):
     """ Exposes a readable file-like interface to stdout of a subprocess """
