@@ -1,7 +1,7 @@
 """
 The dataflow toolkit is based on the following three protocols:
 
-1. iterator protocol
+1. iterable/iterator protocol
 The standard Python protocol for iteration over the items of a container:
     assource(object)) -> Iterable       - if not already Iterable
     iter(Iterable) -> Iterator
@@ -15,12 +15,12 @@ Applies a filter to an upstream iterator, returning output iterator
     * An object with a __filt__ method. Applied to entire stream.
     * A callable object. Applied individually to each item in the stream.
 
-3. feed protocol
-Feeds a source iterator into a data sink.
+3. target/receiver protocol
+Feeds a source iterator into a data target.
     asfeeder(object) -> Feeder          - if not already a Feeder
     feed(Feeder, Iterator)
 
-    A sink may be:
+    A target may be:
     * An object with a __feed__ method
     * A callable object. Will be invoked for each item in stream.
     * A file-like object with a .write() method.
@@ -31,7 +31,8 @@ protocols. This means that a Dataflow is a passive object that
 does not actually do anything to its arguments until stated.
 
 A dataflow uses all three protocols and usually makes it
-unnecessary to directly use the functions iter, filt or feed.
+
+nnecessary to directly use the functions iter, filt or feed.
 Starting a dataflow is done by iteration or using the >> operator.
 The // operator concatenates dataflows and dataflow stages. Sorry,
 but the operator precedence of | is too low which makes it awkward
@@ -60,7 +61,7 @@ Note that the dataflow direction is from left to right while chaining
 of function calls generally works right to left.
 
 TODO: Allow last and second-to-last dataflow stages to collude in bypassing
-iterator protocol (e.g. sink is writable file, prev stage is a subprocess)
+iterator protocol (e.g. target is writable file, prev stage is a subprocess)
 """
 
 from functools import singledispatch
@@ -98,25 +99,25 @@ def filt(filter, upstream):
                 % filter.__class__.__name__)
 
 
-def feed(sink, source):
-    """ Feed source iterator into a data sink """
-    if hasattr(sink, '__feed__'):
-        return sink.__feed__(source)
-    elif type(sink) in feed_registry:
-        feed_registry[type(sink)](sink, source)
-    elif callable(sink):
+def feed(target, source):
+    """ Feed source iterator into a data target """
+    if hasattr(target, '__feed__'):
+        return target.__feed__(source)
+    elif type(target) in feed_registry:
+        feed_registry[type(target)](target, source)
+    elif callable(target):
         # feed items individually
         for x in source:
-            sink(x)
-    elif hasattr(sink, 'write'):
+            target(x)
+    elif hasattr(target, 'write'):
         # feed items individually, converting to string first
         for x in source:
             if not isinstance(x, str):
                 x = '%s\n' % x
-            sink.write(x)
+            target.write(x)
     else:
-        raise TypeError("sink: %r object is not a valid data sink"
-                % sink.__class__.__name__)
+        raise TypeError("target: %r object is not a valid data target"
+                % target.__class__.__name__)
 
 class Feedable(abc.ABC):
     @classmethod
@@ -127,7 +128,7 @@ class Feedable(abc.ABC):
 
 @singledispatch
 def feeder(o):
-    raise TypeError("sink: %r object is not a valid data sink"
+    raise TypeError("target: %r object is not a valid data target"
             % o.__class__.__name__)
 
 @feeder.register(Callable)
@@ -203,9 +204,9 @@ class Dataflow(DataflowOps):
             return filt(laststage, upstream2)
 
     def __call__(self):
-        """ Run dataflow. Last stage must be a valid sink. """
-        sink = self.stages[-1]
-        feed(sink, Dataflow(*self.stages[:-1]) )
+        """ Run dataflow. Last stage must be a valid target. """
+        target = self.stages[-1]
+        feed(target, Dataflow(*self.stages[:-1]) )
 
 
 class File(DataflowOps):

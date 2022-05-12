@@ -106,7 +106,7 @@ class Cmd(_CmdBase, metaclass=MetaCmd):
         """ Start a Producer subprocess """
         return Producer(**vars(self))
 
-    # implements the dataflow feed protocol - use this command as data sink 
+    # implements the dataflow feed protocol - use this command as data target 
     def __feed__(self, source):
         return self.update(stdin=source)()
 
