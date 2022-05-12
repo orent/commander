@@ -16,18 +16,18 @@ necessary in normal use.
 >>> Cmd.echo['Hello, World!'] >> stdout
 Hello, World!
 
->>> Cmd.echo['Hello, World!'] / Cmd.rev >> stdout
+>>> Cmd.echo['Hello, World!'] // Cmd.rev >> stdout
 !dlroW ,olleH
 
 # equivalent, but fails doctest:
 #>>> Cmd.echo['Hello, World!'] >> Cmd.rev
 #!dlroW ,olleH
 
->>> list(xrange(128,132) / Cmd.rev / float)
+>>> list(range(128,132) // Cmd.rev // float)
 [821.0, 921.0, 31.0, 131.0]
 
 >>> l=[]
->>> Cmd.sh['-c', 'echo aaa; echo bbb; echo ccc'] / (lambda x: '@'+x) >> l
+>>> Cmd.sh['-c', 'echo aaa; echo bbb; echo ccc'] // (lambda x: '@'+x) >> l
 >>> l
 ['@aaa\n', '@bbb\n', '@ccc\n']
 
@@ -46,19 +46,19 @@ try:
 except ImportError:
     _CmdBase = object
 
-class Cmd(_CmdBase):
+# Make Cmd.name and Cmd['name'] shortcuts to Cmd(args=['name'])
+class MetaCmd(type):
+    def __getattr__(cls, name):
+        if name.startswith('_'):
+            raise AttributeError
+        return Cmd(args=[name.replace('_', '-')])
+
+    def __getitem__(cls, args):
+        return Cmd(args=args if isinstance(args, (tuple, list)) else [args])
+
+class Cmd(_CmdBase, metaclass=MetaCmd):
     """ Object describing an executable command """
     # Object attrs are named arguments to Subprocess (i.e. subprocess.Popen)
-
-    # Make Cmd.name and Cmd['name'] shortcuts to Cmd(args=['name'])
-    class __metaclass__(type):
-        def __getattr__(cls, name):
-            if name.startswith('_'):
-                raise AttributeError
-            return Cmd(args=[name.replace('_', '-')])
-
-        def __getitem__(cls, args):
-            return Cmd(args=args if isinstance(args, (tuple, list)) else [args])
 
     def __init__(self, *dummy, **kw):
         """ Initialize a command. Normally not called directly. """

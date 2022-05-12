@@ -19,7 +19,7 @@ class Subprocess(subprocess.Popen):
             kw['stdin'] = self._asfiledesc(kw['stdin'])
         self._errorlevel = kw.pop('errorlevel', None)
         self._cmd = subprocess.list2cmdline(args)[:200]
-        subprocess.Popen.__init__(self, args=args, **kw)
+        subprocess.Popen.__init__(self, args=args, text=True, **kw)
 
     def _handle_exitstatus(self, sts):
         subprocess.Popen._handle_exitstatus(self, sts)
@@ -44,35 +44,49 @@ class Subprocess(subprocess.Popen):
         else:
             return Iter2Pipe(iterator)      # no, wrap in bridge thread
 
-class Producer(Subprocess, io.BufferedReader):
+class Producer(Subprocess, io.TextIOWrapper):
     """ Exposes a readable file-like interface to stdout of a subprocess """
+
+    encoding = property(io.TextIOWrapper.encoding.__get__, lambda *args: None)
+    errors   = property(io.TextIOWrapper.errors  .__get__, lambda *args: None)
+
     def __init__(self, args, **kw):
         if 'stdout' in kw:
             raise ValueError("Producer: stdout already overridden")
-        kw['stdout'] = subprocess.PIPE
-        Subprocess.__init__(self, args, **kw)
+        Subprocess.__init__(self, args, stdout=subprocess.PIPE, **kw)
+        self._orig_stdout = f = self.stdout
+        self.stdout = None
+        io.TextIOWrapper.__init__(
+            self,
+            buffer=f.buffer, 
+            encoding=f.encoding, 
+            errors=f.errors,
+            newline=f.newlines,
+            line_buffering=f.line_buffering,
+            write_through=f.write_through
+        )
 
-        fd = os.dup(self.stdout.fileno())   # prevents closing of pipe
-        self.stdout = None                  #  when stdout file object dies
 
-        filemode = 'rU' if kw.get('universal_newlines', False) else 'r'
-        io.BufferedReader.__init__(self, io.FileIO(fd, filemode))
-
-
-class Consumer(Subprocess, io.BufferedWriter):
+class Consumer(Subprocess, io.TextIOWrapper):
     """ Exposes a writable file-like interface to stdin of a subprocess """
-    def __init__(self, args, **kw):
-        if 'stdin' in kw:
+    def __init__(self, args, stdin=None, **kw):
+        if stdin is not None:
             raise ValueError("Consumer: stdin already overridden")
-        kw['stdin'] = subprocess.PIPE
-        Subprocess.__init__(self, args, **kw)
+        Subprocess.__init__(self, args, stdin=subprocess.PIPE, **kw)
+        f = self.stdin
+        self.stdin = None
+        io.TextIOWrapper.__init__(
+            self,
+            buffer=f.buffer, 
+            encoding=f.encoding, 
+            errors=f.errors,
+            newline=f.newline,
+            line_buffering=f.line_buffering,
+            write_through=f.write_through
+        )
 
-        fd = os.dup(self.stdin.fileno())    # prevents closing of pipe
-        self.stdin = None                   #  when stdin file object dies
-        io.BufferedWriter.__init__(self, io.FileIO(fd), 'w')
 
-
-class _RawIterIO(io.BufferedIOBase):
+class _RawIterIO(io.TextIOWrapper):
     """ Helper class for turning python iterator to a file-like object """
     def __init__(self, iterable):
         self.iterator = self.sourcereader(iterable)
@@ -102,7 +116,7 @@ class _RawIterIO(io.BufferedIOBase):
         return data
 
     def close(self):
-        io.BufferedIOBase.close(self)
+        io.TextIOWrapper.close(self)
         self.iterator = None
 
 
@@ -115,7 +129,7 @@ def make_readable(obj):
         return StringIO(obj)
     else:
         # assume it's somehow iterable:
-        return io.BufferedReader(_RawIterIO(obj))
+        return io.TextIOWrapper(_RawIterIO(obj))
 
 
 class Iter2Pipe(threading.Thread):

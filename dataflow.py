@@ -3,11 +3,13 @@ The dataflow toolkit is based on the following three protocols:
 
 1. iterator protocol
 The standard Python protocol for iteration over the items of a container:
-    iter(container) -> iterator
+    assource(object)) -> Iterable       - if not already Iterable
+    iter(Iterable) -> Iterator
 
 2. filter protocol
 Applies a filter to an upstream iterator, returning output iterator
-    filt(filter, upstream) -> iterator
+    asfilter(object) -> Filter          - if not already a Filter
+    filt(Filter, Iterator) -> Iterator
 
     A filter may be:
     * An object with a __filt__ method. Applied to entire stream.
@@ -15,8 +17,8 @@ Applies a filter to an upstream iterator, returning output iterator
 
 3. feed protocol
 Feeds a source iterator into a data sink.
-
-    feed(sink, source)
+    asfeeder(object) -> Feeder          - if not already a Feeder
+    feed(Feeder, Iterator)
 
     A sink may be:
     * An object with a __feed__ method
@@ -31,16 +33,16 @@ does not actually do anything to its arguments until stated.
 A dataflow uses all three protocols and usually makes it
 unnecessary to directly use the functions iter, filt or feed.
 Starting a dataflow is done by iteration or using the >> operator.
-The / operator concatenates dataflows and dataflow stages. Sorry,
+The // operator concatenates dataflows and dataflow stages. Sorry,
 but the operator precedence of | is too low which makes it awkward
 to use and requires parentheses.
 
 The following statements are equivalent:
     for x in filt(f2, filt(f1, iter(src))):
     for x in Dataflow(src, f1, f2):
-    for x in Dataflow(src) / Dataflow(f1) / Dataflow(f2):
-    for x in Dataflow(src) / f1 / f2:
-    for x in src / f1 / f2:
+    for x in Dataflow(src) // Dataflow(f1) // Dataflow(f2):
+    for x in Dataflow(src) // f1 // f2:
+    for x in src // f1 // f2:
 
     (last one works if either src or f1 are derived from DataflowOps)
 
@@ -49,8 +51,8 @@ The following statements are also equivalent:
     feed(target, Dataflow(src, f1, f2))
     Dataflow(src, f1, f2, target)()
     Dataflow(src, f1, f2) >> target
-    Dataflow(src) / f1 / f2 >> target
-    src / f1 / f2 >> target
+    Dataflow(src) // f1 // f2 >> target
+    src // f1 // f2 >> target
 
     (again, last one requires src or f1 to have DataflowOps)
 
@@ -61,22 +63,26 @@ TODO: Allow last and second-to-last dataflow stages to collude in bypassing
 iterator protocol (e.g. sink is writable file, prev stage is a subprocess)
 """
 
+from functools import singledispatch
+from collections.abc import *
+import abc
+
 class DataflowOps(object):
-    """ Adds / and >> dataflow operators to an object """
-    def __div__(self, right):
+    """ Adds // and >> dataflow operators to an object """
+    def __floordiv__(self, right):
         """ Concatenate dataflows or stages """
         return Dataflow(self, right)
 
-    def __rdiv__(self, left):
+    def __rfloordiv__(self, left):
         """ Concatenate to dataflow on the right """
         return Dataflow(left, self)
 
     def __rshift__(self, right):
         """ Concatenate and start dataflow """
-        ( Dataflow(self) / Dataflow(right) )()
+        ( Dataflow(self) // Dataflow(right) )()
 
     def __rrshift__(self, left):
-        ( Dataflow(left) / Dataflow(self) )()
+        ( Dataflow(left) // Dataflow(self) )()
 
 
 def filt(filter, upstream):
@@ -112,26 +118,53 @@ def feed(sink, source):
         raise TypeError("sink: %r object is not a valid data sink"
                 % sink.__class__.__name__)
 
+class Feedable(abc.ABC):
+    @classmethod
+    def __subclasshook__(cls, x):
+        if hasattr(x, '__feeder__'):
+            return True
+        return NotImplemented
 
-def feed_list(l, source):
+@singledispatch
+def feeder(o):
+    raise TypeError("sink: %r object is not a valid data sink"
+            % o.__class__.__name__)
+
+@feeder.register(Callable)
+def feeder_callable(c):
+    yield None
+    while True:
+        x = yield
+        c(x)
+
+@feeder.register(Feedable)
+def feeder_feedable(f):
+    return f.__feeder__()
+
+@feeder.register(list)
+def feeder_list(l):
     """ Replace list contents with iterable source """
-    l[:] = source
+    yield None
+    l[:] = ()
+    while True:
+        x = yield
+        l.append(x)
 
-def feed_set(s, source):
+@feeder.register(set)
+def feeder_set(s):
     """ Replace set contents with iterable source"""
+    yield None
     s.clear()
-    s.update(source)
+    while True:
+        x = yield
+        s.add(x)
 
-def feed_null(s, source):
+@feeder.register(type(None))
+def feed_none(n):
     """ Feed iterable source to the bit bucket """
-    for x in source:
-        pass
+    while True:
+        yield
 
-feed_registry = {
-    list : feed_list,
-    set : feed_set,
-    type(None): feed_null,
-}
 
 class Dataflow(DataflowOps):
     """ Object representing recipe for a data flow """
